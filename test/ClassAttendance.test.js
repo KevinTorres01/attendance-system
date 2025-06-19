@@ -28,7 +28,7 @@ function getFutureDate(daysAhead) {
 }
 
 describe("ClassAttendance Contract", () => {
-  let owner, professor1, professor2, student1, student2, unauthorized;
+  let deployer, admin, professor1, professor2, student1, student2, unauthorized;
   let contract;
 
   before(async () => {
@@ -40,22 +40,26 @@ describe("ClassAttendance Contract", () => {
   });
 
   beforeEach(async function() {
-    [owner, professor1, professor2, student1, student2, unauthorized] = await ethers.getSigners();
+    [deployer, admin, professor1, professor2, student1, student2, unauthorized] = await ethers.getSigners();
     
     const ClassAttendance = await ethers.getContractFactory("ClassAttendance");
-    contract = await ClassAttendance.deploy();
+    contract = await ClassAttendance.deploy(admin.address);
     await contract.waitForDeployment();
     
-    // Setup roles
-    await contract.addProfessor(professor1.address);
-    await contract.addProfessor(professor2.address);
-    await contract.connect(professor1).addStudent(student1.address);
-    await contract.connect(professor1).addStudent(student2.address);
+    // Setup roles by admin
+    await contract.connect(admin).addProfessor(professor1.address);
+    await contract.connect(admin).addProfessor(professor2.address);
+    await contract.connect(admin).addStudent(student1.address);
+    await contract.connect(admin).addStudent(student2.address);
   });
 
   describe("Deployment and Setup", () => {
-    it("sets the correct owner", async () => {
-      expect(await contract.owner()).to.equal(owner.address);
+    it("sets the correct deployer", async () => {
+      expect(await contract.deployer()).to.equal(deployer.address);
+    });
+
+    it("sets the initial admin", async () => {
+      expect(await contract.admins(admin.address)).to.be.true;
     });
 
     it("has initial professors", async () => {
@@ -69,24 +73,56 @@ describe("ClassAttendance Contract", () => {
     });
   });
 
+  describe("Admin Management", () => {
+    it("allows deployer to add new admins", async () => {
+      await expect(contract.connect(deployer).addAdmin(unauthorized.address))
+        .to.emit(contract, "AdminAdded")
+        .withArgs(unauthorized.address);
+      
+      expect(await contract.admins(unauthorized.address)).to.be.true;
+    });
+
+    it("prevents non-deployers from adding admins", async () => {
+      await expect(contract.connect(admin).addAdmin(unauthorized.address))
+        .to.be.revertedWithCustomError(contract, "Unauthorized");
+      
+      await expect(contract.connect(professor1).addAdmin(unauthorized.address))
+        .to.be.revertedWithCustomError(contract, "Unauthorized");
+    });
+
+    it("prevents adding duplicate admins", async () => {
+      await contract.connect(deployer).addAdmin(unauthorized.address);
+      await expect(contract.connect(deployer).addAdmin(unauthorized.address))
+        .to.be.revertedWithCustomError(contract, "AlreadyRegistered");
+    });
+
+    it("prevents adding professors/students as admins if already registered", async () => {
+      await expect(contract.connect(deployer).addAdmin(professor1.address))
+        .to.be.revertedWithCustomError(contract, "AlreadyRegistered");
+      
+      await expect(contract.connect(deployer).addAdmin(student1.address))
+        .to.be.revertedWithCustomError(contract, "AlreadyRegistered");
+    });
+  });
+
   describe("Role Management", () => {
     it("prevents adding duplicate professors", async () => {
-      await expect(contract.addProfessor(professor1.address))
+      await expect(contract.connect(admin).addProfessor(professor1.address))
         .to.be.revertedWithCustomError(contract, "AlreadyRegistered");
     });
 
     it("prevents adding duplicate students", async () => {
-      await expect(contract.connect(professor1).addStudent(student1.address))
+      await expect(contract.connect(admin).addStudent(student1.address))
         .to.be.revertedWithCustomError(contract, "AlreadyRegistered");
     });
 
     it("prevents students from becoming professors", async () => {
-      await expect(contract.addProfessor(student1.address))
+      await expect(contract.connect(admin).addProfessor(student1.address))
         .to.be.revertedWithCustomError(contract, "AlreadyRegistered");
     });
 
     it("prevents professors from becoming students", async () => {
-      await expect(contract.connect(professor1).addStudent(professor1.address))
+      await expect(contract.connect(admin).addStudent(professor1.address))
         .to.be.revertedWithCustomError(contract, "AlreadyRegistered");
     });
 
@@ -101,12 +137,12 @@ describe("ClassAttendance Contract", () => {
     });
 
     it("prevents adding a professor who is already a student", async () => {
-      await expect(contract.addProfessor(student1.address))
+      await expect(contract.connect(admin).addProfessor(student1.address))
         .to.be.revertedWithCustomError(contract, "AlreadyRegistered");
     });
 
     it("prevents adding a student who is already a professor", async () => {
-      await expect(contract.connect(professor1).addStudent(professor1.address))
+      await expect(contract.connect(admin).addStudent(professor1.address))
         .to.be.revertedWithCustomError(contract, "AlreadyRegistered");
     });
   });
@@ -148,7 +184,7 @@ describe("ClassAttendance Contract", () => {
         .withArgs(professor2.address, student1.address, today);
     });
 
-    it("prevents invalid date (0)", async () => {
+    it("prevents invalid dates", async () => {
       await expect(
         contract.connect(professor1).giveAttendance(student1.address, 0)
       ).to.be.revertedWithCustomError(contract, "InvalidDate");
@@ -211,7 +247,7 @@ describe("ClassAttendance Contract", () => {
     });
 
     it("accepts valid dates", async () => {
-      const validDates = [20230615, 20200229, 20231231, getFutureDate(1)];
+      const validDates = [20250615, 20240229, 20231231, getFutureDate(1)];
       
       for (const date of validDates) {
         await contract.connect(professor1).giveAttendance(student1.address, date);
@@ -225,14 +261,20 @@ describe("ClassAttendance Contract", () => {
   });
 
   describe("Event Logging", () => {
+    it("emits AdminAdded event", async () => {
+      await expect(contract.connect(deployer).addAdmin(unauthorized.address))
+        .to.emit(contract, "AdminAdded")
+        .withArgs(unauthorized.address);
+    });
+
     it("emits ProfessorAdded event", async () => {
-      await expect(contract.addProfessor(unauthorized.address))
+      await expect(contract.connect(admin).addProfessor(unauthorized.address))
         .to.emit(contract, "ProfessorAdded")
         .withArgs(unauthorized.address);
     });
 
     it("emits StudentAdded event", async () => {
-      await expect(contract.connect(professor1).addStudent(unauthorized.address))
+      await expect(contract.connect(admin).addStudent(unauthorized.address))
         .to.emit(contract, "StudentAdded")
         .withArgs(unauthorized.address);
     });

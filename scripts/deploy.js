@@ -1,20 +1,27 @@
 const { ethers } = require("hardhat");
 
 async function main() {
-  // Get all accounts
-  const [owner, professor1, professor2, student1, student2] = await ethers.getSigners();
-  const accounts = [
-    { name: "Owner", signer: owner, initialBalance: ethers.toBeHex(ethers.parseEther("10000")) },
-    { name: "Professor 1", signer: professor1, initialBalance: ethers.toBeHex(ethers.parseEther("20000")) },
-    { name: "Professor 2", signer: professor2, initialBalance: ethers.toBeHex(ethers.parseEther("20000")) },
-    { name: "Student 1", signer: student1, initialBalance: ethers.toBeHex(0) },
-    { name: "Student 2", signer: student2, initialBalance: ethers.toBeHex(0) }
-  ];
+  const [deployer, admin, professor1, professor2, student1, student2] = await ethers.getSigners();
   
+  console.log("Deploying contract with admin:", admin.address);
+
+  const ClassAttendance = await ethers.getContractFactory("ClassAttendance");
+  const contract = await ClassAttendance.deploy(admin.address);
+  await contract.waitForDeployment();
+
+  const address = await contract.getAddress();
+  console.log("Contract deployed to:", address);
+
+  // Add professors and students by admin
+  await contract.connect(admin).addProfessor(professor1.address);
+  await contract.connect(admin).addProfessor(professor2.address);
+  await contract.connect(admin).addStudent(student1.address);
+  await contract.connect(admin).addStudent(student2.address);
+
   console.log("=======================================================");
   console.log("🚀 Starting ClassAttendance Contract Deployment");
   console.log("=======================================================");
-  
+
   // Set initial balances (using Hardhat network helpers)
   console.log("\n🔑 Setting initial balances...");
   for (const account of accounts) {
@@ -31,7 +38,7 @@ async function main() {
   const ClassAttendance = await ethers.getContractFactory("ClassAttendance");
   const contract = await ClassAttendance.deploy();
   await contract.waitForDeployment();
-  
+
   const address = await contract.getAddress();
   console.log("✅ Contract deployed to:", address);
 
@@ -51,17 +58,17 @@ async function main() {
 
   // Record attendance and transfer 1 ETH per attendance
   console.log("\n📝 Recording attendance and transferring ETH...");
-  
+
   // Helper to get YYYYMMDD date
   function getDate(daysAgo) {
     const date = new Date();
     date.setDate(date.getDate() - daysAgo);
-    return parseInt(date.toISOString().slice(0,10).replace(/-/g, ''));
+    return parseInt(date.toISOString().slice(0, 10).replace(/-/g, ''));
   }
-  
+
   const today = getDate(0);
   const yesterday = getDate(1);
-  
+
   // Professor1 records today's attendance and transfers 1 ETH
   await professor1.sendTransaction({
     to: student1.address,
@@ -69,7 +76,7 @@ async function main() {
   });
   await contract.connect(professor1).giveAttendance(student1.address, today);
   console.log(`   Professor 1 recorded attendance for Student 1 on ${today} and transferred 1 ETH`);
-  
+
   // Professor1 records yesterday's attendance and transfers 1 ETH
   await professor1.sendTransaction({
     to: student1.address,
@@ -77,7 +84,7 @@ async function main() {
   });
   await contract.connect(professor1).giveAttendance(student1.address, yesterday);
   console.log(`   Professor 1 recorded attendance for Student 1 on ${yesterday} and transferred 1 ETH`);
-  
+
   // Professor2 records today's attendance and transfers 1 ETH
   await professor2.sendTransaction({
     to: student2.address,
@@ -91,10 +98,12 @@ async function main() {
   const record1 = await contract.attendanceRecords(professor1.address, student1.address, today);
   const record2 = await contract.attendanceRecords(professor1.address, student1.address, yesterday);
   const record3 = await contract.attendanceRecords(professor2.address, student2.address, today);
-  
-  console.log(`   Student 1 today: ${record1 ? "✅ Present" : "❌ Absent"}`);
-  console.log(`   Student 1 yesterday: ${record2 ? "✅ Present" : "❌ Absent"}`);
-  console.log(`   Student 2 today: ${record3 ? "✅ Present" : "❌ Absent"}`);
+  const record4 = await contract.attendanceRecords(professor2.address, student2.address, yesterday);
+
+  console.log(`   Student 1 today, Professor1 class: ${record1 ? "✅ Present" : "❌ Absent"}`);
+  console.log(`   Student 1 yesterday, Professor1 class: ${record2 ? "✅ Present" : "❌ Absent"}`);
+  console.log(`   Student 2 today, Professor2 class: ${record3 ? "✅ Present" : "❌ Absent"}`);
+  console.log(`   Student 2 yesterday, Professor2 class: ${record4 ? "✅ Present" : "❌ Absent"}`);
 
   // Show final balances
   console.log("\n💰 Final Balances:");
