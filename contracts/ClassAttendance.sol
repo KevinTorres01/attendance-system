@@ -57,8 +57,7 @@ contract ClassAttendance {
     }
     
     function addStudent(address _student) external onlyAdmin {
-        if (students[_student] || professors[_student]) 
-            revert AlreadyRegistered();
+        if (students[_student] || professors[_student]) revert AlreadyRegistered();        
         students[_student] = true;
         emit StudentAdded(_student);
     }
@@ -89,7 +88,6 @@ contract ClassAttendance {
     }
     return true;
 }
-    
     // Record attendance (only professor)
     function giveAttendance(address _student, uint256 _date) external onlyProfessor {
     if (!isValidDate(_date)) revert InvalidDate();

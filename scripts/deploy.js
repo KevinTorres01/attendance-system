@@ -1,62 +1,51 @@
 const { ethers } = require("hardhat");
 
+// Helper function to set balances
+async function setBalance(address, ethAmount) {
+  const weiAmount = ethers.parseEther(ethAmount.toString());
+  await ethers.provider.send("hardhat_setBalance", [
+    address,
+    ethers.toBeHex(weiAmount)
+  ]);
+}
+
 async function main() {
   const [deployer, admin, professor1, professor2, student1, student2] = await ethers.getSigners();
-  
+
   console.log("Deploying contract with admin:", admin.address);
 
-  const ClassAttendance = await ethers.getContractFactory("ClassAttendance");
-  const contract = await ClassAttendance.deploy(admin.address);
+  const ClassAttendanceFactory = await ethers.getContractFactory("ClassAttendance");
+  const contract = await ClassAttendanceFactory.deploy(admin.address);
+
+  // Correct way to wait for deployment
   await contract.waitForDeployment();
 
   const address = await contract.getAddress();
   console.log("Contract deployed to:", address);
 
-  // Add professors and students by admin
-  await contract.connect(admin).addProfessor(professor1.address);
-  await contract.connect(admin).addProfessor(professor2.address);
-  await contract.connect(admin).addStudent(student1.address);
-  await contract.connect(admin).addStudent(student2.address);
-
-  console.log("=======================================================");
-  console.log("🚀 Starting ClassAttendance Contract Deployment");
-  console.log("=======================================================");
-
-  // Set initial balances (using Hardhat network helpers)
-  console.log("\n🔑 Setting initial balances...");
-  for (const account of accounts) {
-    await ethers.provider.send("hardhat_setBalance", [
-      account.signer.address,
-      account.initialBalance
-    ]);
-    const balance = await ethers.provider.getBalance(account.signer.address);
-    console.log(`   Set ${account.name} balance to ${ethers.formatEther(balance)} ETH`);
-  }
-
-  // Deploy contract
-  console.log("\n⚙️ Deploying ClassAttendance contract...");
-  const ClassAttendance = await ethers.getContractFactory("ClassAttendance");
-  const contract = await ClassAttendance.deploy();
-  await contract.waitForDeployment();
-
-  const address = await contract.getAddress();
-  console.log("✅ Contract deployed to:", address);
-
   // Add professors
   console.log("\n👨‍🏫 Adding professors...");
-  await contract.addProfessor(professor1.address);
-  await contract.addProfessor(professor2.address);
+
+  await contract.connect(admin).addProfessor(professor1.address);
+  await contract.connect(admin).addProfessor(professor2.address);
   console.log("   Added Professor 1:", professor1.address);
   console.log("   Added Professor 2:", professor2.address);
 
   // Add students
   console.log("\n👨‍🎓 Adding students...");
-  await contract.connect(professor1).addStudent(student1.address);
-  await contract.connect(professor1).addStudent(student2.address);
+
+  await contract.connect(admin).addStudent(student1.address,);
+  await contract.connect(admin).addStudent(student2.address)
   console.log("   Added Student 1:", student1.address);
   console.log("   Added Student 2:", student2.address);
+  
+  await setBalance(admin.address, 10000);       // 10,000 ETH
+  await setBalance(professor1.address, 20000);  // 20,000 ETH
+  await setBalance(professor2.address, 20000);  // 20,000 ETH
+  await setBalance(student1.address, 0);        // 0 ETH
+  await setBalance(student2.address, 0);        // 0 ETH
 
-  // Record attendance and transfer 1 ETH per attendance
+  // Record attendance and transfer ETH
   console.log("\n📝 Recording attendance and transferring ETH...");
 
   // Helper to get YYYYMMDD date
@@ -107,20 +96,27 @@ async function main() {
 
   // Show final balances
   console.log("\n💰 Final Balances:");
+  const accounts = [
+    { name: "Deployer", signer: deployer },
+    { name: "Admin", signer: admin },
+    { name: "Professor 1", signer: professor1 },
+    { name: "Professor 2", signer: professor2 },
+    { name: "Student 1", signer: student1 },
+    { name: "Student 2", signer: student2 }
+  ];
+
   for (const account of accounts) {
     const balance = await ethers.provider.getBalance(account.signer.address);
     console.log(`   ${account.name}: ${ethers.formatEther(balance)} ETH`);
   }
 
-  // Final summary
   console.log("\n=======================================================");
-  console.log("🎉 Deployment and Setup Complete!");
+  console.log("🎉 Deployment Complete!");
   console.log("=======================================================");
   console.log(`Contract Address: ${address}`);
+  console.log(`Admin: ${admin.address}`);
   console.log(`Professors: ${professor1.address}, ${professor2.address}`);
   console.log(`Students: ${student1.address}, ${student2.address}`);
-  console.log("Attendance Records: 3 created");
-  console.log("ETH Transfers: 3 ETH transferred to students");
   console.log("=======================================================\n");
 }
 
